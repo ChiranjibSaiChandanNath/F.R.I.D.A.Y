@@ -77,12 +77,14 @@ async def get_recent_emails(count: int = 5) -> list[dict]:
             payload = msg_data.get('payload', {})
             headers = payload.get('headers', [])
             
+            label_ids = msg_data.get('labelIds', [])
             email_info = {
                 "id": msg['id'], 
                 "sender": "Unknown Sender", 
                 "subject": "(No Subject)", 
                 "date": "", 
-                "snippet": msg_data.get('snippet', '')
+                "snippet": msg_data.get('snippet', ''),
+                "read": 'UNREAD' not in label_ids
             }
             
             for header in headers:
@@ -204,4 +206,74 @@ async def get_todays_calendar_events() -> list[dict]:
         return await asyncio.to_thread(_do)
     except Exception as e:
         log.error(f"Failed to get calendar events: {e}")
+        return []
+
+
+async def get_gmail_unread_count() -> dict:
+    """Retrieve the number of unread emails in Gmail."""
+    import os
+    if os.getenv("GMAIL_INTEGRATION", "false").lower() not in ("1", "true", "yes"):
+        return {"total": 0, "accounts": {}}
+    def _do():
+        service = _get_gmail_service()
+        result = service.users().labels().get(userId='me', id='UNREAD').execute()
+        unread_count = result.get('messagesUnread', 0)
+        return {"total": unread_count, "accounts": {"Gmail": unread_count}}
+
+    try:
+        return await asyncio.to_thread(_do)
+    except Exception as e:
+        log.error(f"Failed to get Gmail unread count: {e}")
+        return {"total": 0, "accounts": {}}
+
+
+async def search_gmail(query: str, count: int = 10) -> list[dict]:
+    """Search Gmail messages matching the query string."""
+    import os
+    if os.getenv("GMAIL_INTEGRATION", "false").lower() not in ("1", "true", "yes"):
+        return []
+    def _do():
+        service = _get_gmail_service()
+        results = service.users().messages().list(userId='me', q=query, maxResults=count).execute()
+        messages = results.get('messages', [])
+        
+        emails = []
+        for msg in messages:
+            msg_data = service.users().messages().get(
+                userId='me', 
+                id=msg['id'], 
+                format='metadata', 
+                metadataHeaders=['From', 'Subject', 'Date']
+            ).execute()
+            
+            payload = msg_data.get('payload', {})
+            headers = payload.get('headers', [])
+            label_ids = msg_data.get('labelIds', [])
+            
+            email_info = {
+                "id": msg['id'], 
+                "sender": "Unknown Sender", 
+                "subject": "(No Subject)", 
+                "date": "", 
+                "snippet": msg_data.get('snippet', ''),
+                "read": 'UNREAD' not in label_ids
+            }
+            
+            for header in headers:
+                name = header.get('name', '')
+                val = header.get('value', '')
+                if name == 'From':
+                    email_info['sender'] = val
+                elif name == 'Subject':
+                    email_info['subject'] = val
+                elif name == 'Date':
+                    email_info['date'] = val
+                    
+            emails.append(email_info)
+        return emails
+
+    try:
+        return await asyncio.to_thread(_do)
+    except Exception as e:
+        log.error(f"Failed to search Gmail: {e}")
         return []
