@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>F.R.I.D.A.Y.</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+
+<body>
+  <!-- ================================================================
+       LOCK SCREEN — shown when FACE_AUTH=true
+       ================================================================ -->
+  <div id="lock-screen" data-phase="face">
+
+    <!-- Top header -->
+    <div class="lock-header">
+      <div class="lock-title-label">F . R . I . D . A . Y .</div>
+      <div class="lock-subtitle">BIOMETRIC AUTHENTICATION SYSTEM</div>
+    </div>
+
+    <!-- Face phase -->
+    <div class="lock-face-wrap">
+      <div class="lock-ring-wrap">
+        <div class="lock-ring lock-ring-1"></div>
+        <div class="lock-ring lock-ring-2"></div>
+        <div class="lock-ring lock-ring-3"></div>
+        <div class="lock-circle">
+          <video class="lock-video" autoplay muted playsinline></video>
+          <div class="lock-scan-line"></div>
+          <div class="lock-hud-tl"></div>
+          <div class="lock-hud-tr"></div>
+          <div class="lock-hud-bl"></div>
+          <div class="lock-hud-br"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Voice phase -->
+    <div class="lock-voice-wrap">
+      <div class="lock-mic-ring">
+        <div class="lock-mic-pulse lock-mic-pulse-1"></div>
+        <div class="lock-mic-pulse lock-mic-pulse-2"></div>
+        <div class="lock-mic-pulse lock-mic-pulse-3"></div>
+        <svg class="lock-mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+          <line x1="12" y1="19" x2="12" y2="23" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div class="lock-status">
+      <div class="lock-status-text">INITIALIZING...</div>
+      <div class="lock-status-dots"><span></span><span></span><span></span></div>
+    </div>
+
+    <!-- Denied overlay -->
+    <div class="lock-denied-msg">ACCESS DENIED</div>
+
+    <!-- Unlock ripple -->
+    <div class="lock-ripple"></div>
+
+  </div>
+
+  <canvas id="orb-canvas"></canvas>
+
+  <!-- Minimal controls — top right -->
+  <div id="controls">
+    <button id="btn-mute" title="Mute/Unmute">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+        <line x1="12" y1="19" x2="12" y2="23" />
+      </svg>
+    </button>
+    <button id="btn-menu" title="Menu">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="1" />
+        <circle cx="12" cy="5" r="1" />
+        <circle cx="12" cy="19" r="1" />
+      </svg>
+    </button>
+  </div>
+
+  <!-- Dropdown menu -->
+  <div id="menu-dropdown" style="display:none">
+    <button id="btn-settings">Settings</button>
+    <button id="btn-restart">Restart Server</button>
+    <button id="btn-fix-self">Fix Yourself</button>
+  </div>
+
+  <div id="status-text"></div>
+  <div id="friday-label">F.R.I.D.A.Y.</div>
+  <div id="error-text"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

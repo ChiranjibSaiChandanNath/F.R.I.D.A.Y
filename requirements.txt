@@ -1,0 +1,41 @@
+# ── F.R.I.D.A.Y. Windows/Linux Dependencies (macOS code removed) ─────────────────
+# ── Core API & Server ──────────────────────────────────────────────────────
+anthropic>=0.39.0
+httpx>=0.27.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.0.0
+websockets>=13.0
+
+# ── LLM / AI ───────────────────────────────────────────────────────────────
+tavily-python>=0.7.0          # Real-time web search (optional)
+
+# ── Text-to-Speech ─────────────────────────────────────────────────────────
+edge-tts>=7.0.0               # Primary TTS (Microsoft Edge Neural, free, fast)
+# kokoro-onnx                 # Offline TTS fallback — install separately:
+#                               pip install kokoro-onnx soundfile
+
+# ── Browser / UI Automation ────────────────────────────────────────────────
+playwright>=1.40.0
+pyautogui>=0.9.54             # Keyboard & mouse control (browser tab control, system media keys)
+pygetwindow>=0.0.9            # Window focus (browser control)
+
+# ── Vision / Face Auth ─────────────────────────────────────────────────────
+pillow>=10.0.0
+opencv-contrib-python>=4.8.0  # Face authentication (optional)
+numpy>=1.20.0
+
+# ── Audio / Microphone ─────────────────────────────────────────────────────
+SpeechRecognition>=3.10.0
+pyaudio>=0.2.14
+
+# ── Google APIs (Gmail, Calendar) ──────────────────────────────────────────
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
+google-api-python-client>=2.100.0
+
+# ── System Info ────────────────────────────────────────────────────────────
+psutil>=5.9.0                 # Battery %, CPU, memory — real-time system info
+
+# ── Utilities ──────────────────────────────────────────────────────────────
+pyyaml>=6.0
