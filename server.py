@@ -1348,7 +1348,22 @@ _last_greeting_time: float = 0
 # Uses Microsoft's neural TTS service (same engine as Edge browser Read Aloud).
 # Free, no API key, ~0.3s response. Voice: en-IE-EmilyNeural (Irish female - movie accurate).
 
-EDGE_TTS_VOICE = "en-IE-EmilyNeural"
+# ── Voice gender (female / male) — read from .env, hot-swappable via API ───
+VOICE_GENDER = os.getenv("VOICE_GENDER", "female").lower()  # "female" or "male"
+
+# Edge TTS voice map
+_EDGE_TTS_VOICES = {
+    "female": "en-IE-EmilyNeural",   # Irish female — movie accurate
+    "male":   "en-IE-ConnorNeural",   # Irish male
+}
+# Kokoro voice map
+_KOKORO_VOICES = {
+    "female": "bf_emma",
+    "male":   "bm_george",
+}
+
+EDGE_TTS_VOICE = _EDGE_TTS_VOICES.get(VOICE_GENDER, _EDGE_TTS_VOICES["female"])
+KOKORO_VOICE   = _KOKORO_VOICES.get(VOICE_GENDER,   _KOKORO_VOICES["female"])
 _edge_tts_available: Optional[bool] = None  # None = untested, True/False after first call
 
 
@@ -1394,14 +1409,16 @@ _kokoro_instance = None
 
 def _get_kokoro():
     global _kokoro_instance
+    # None = not tried yet, False = tried and failed, object = success
     if _kokoro_instance is not None:
-        return _kokoro_instance
+        return _kokoro_instance if _kokoro_instance is not False else None
 
     onnx_path = Path(PROJECT_DIR) / "kokoro-v1.0.onnx"
     bin_path = Path(PROJECT_DIR) / "voices-v1.0.bin"
 
     if not onnx_path.exists() or not bin_path.exists():
         log.warning("Kokoro model files missing — offline fallback unavailable.")
+        _kokoro_instance = False
         return None
 
     try:
@@ -1412,6 +1429,7 @@ def _get_kokoro():
         return _kokoro_instance
     except Exception as e:
         log.error(f"Failed to initialize Kokoro: {e}")
+        _kokoro_instance = False  # sentinel: don't retry
         return None
 
 
@@ -1426,7 +1444,7 @@ async def _synthesize_kokoro(text: str) -> Optional[bytes]:
             import io, wave
             import numpy as np
             samples, sample_rate = kokoro.create(
-                text, voice="bf_emma", speed=1.0, lang="en-gb"
+                text, voice=KOKORO_VOICE, speed=1.0, lang="en-gb"
             )
             pcm = np.clip(samples, -1.0, 1.0)
             pcm = (pcm * 32767.0).astype(np.int16)
@@ -2832,6 +2850,9 @@ async def voice_handler(ws: WebSocket):
     # Audio collision prevention — track when user last spoke
     voice_state = {"last_user_time": 0.0}
 
+    # Pending app-not-found follow-up
+    pending_app_search: str | None = None
+
     # Self-awareness — track last spoken response to avoid repetition
     last_friday_response = ""
 
@@ -2937,6 +2958,105 @@ async def voice_handler(ws: WebSocket):
             try:
                 # ── CHECK FOR MODE SWITCHES ──
                 t_lower = user_text.lower()
+
+                # ── PENDING APP-NOT-FOUND: user chose Chrome or Microsoft Store ──
+                if pending_app_search:
+                    app_query = pending_app_search
+                    pending_app_search = None
+
+                    # Direct download URLs (Chrome path)
+                    _chrome_urls: dict[str, str] = {
+                        "vlc":              "https://www.videolan.org/vlc/download-windows.html",
+                        "vlc media player": "https://www.videolan.org/vlc/download-windows.html",
+                        "discord":          "https://discord.com/download",
+                        "zoom":             "https://zoom.us/download",
+                        "slack":            "https://slack.com/downloads/windows",
+                        "microsoft teams":  "https://www.microsoft.com/en-us/microsoft-teams/download-app",
+                        "teams":            "https://www.microsoft.com/en-us/microsoft-teams/download-app",
+                        "whatsapp":         "https://www.whatsapp.com/download",
+                        "telegram":         "https://desktop.telegram.org/",
+                        "spotify":          "https://www.spotify.com/download/windows/",
+                        "notion":           "https://www.notion.so/desktop",
+                        "obsidian":         "https://obsidian.md/download",
+                        "vs code":          "https://code.visualstudio.com/download",
+                        "vscode":           "https://code.visualstudio.com/download",
+                        "visual studio code": "https://code.visualstudio.com/download",
+                        "firefox":          "https://www.mozilla.org/en-US/firefox/new/",
+                        "chrome":           "https://www.google.com/chrome/",
+                        "google chrome":    "https://www.google.com/chrome/",
+                        "notepad++":        "https://notepad-plus-plus.org/downloads/",
+                        "zoom":             "https://zoom.us/download",
+                        "7zip":             "https://www.7-zip.org/download.html",
+                        "7-zip":            "https://www.7-zip.org/download.html",
+                        "winrar":           "https://www.rarlab.com/download.htm",
+                        "steam":            "https://store.steampowered.com/about/",
+                        "epic games":       "https://store.epicgames.com/en-US/download",
+                    }
+
+                    # Microsoft Store product IDs (Store path)
+                    _store_ids: dict[str, str] = {
+                        "vlc":              "9NBLGGH4VVNH",
+                        "vlc media player": "9NBLGGH4VVNH",
+                        "spotify":          "9NCBCSZSJRSB",
+                        "whatsapp":         "9NKSQGP7F2NH",
+                        "microsoft teams":  "XP8BT8DW290MPQ",
+                        "teams":            "XP8BT8DW290MPQ",
+                        "telegram":         "9NZTWSQNTD0S",
+                        "zoom":             "XP99J3KP4XZ4VV",
+                        "discord":          "XP8K2BXML67RGC",
+                        "snipping tool":    "9MZ95KL8MR0L",
+                        "photos":           "9WZDNCRFJBH4",
+                        "todo":             "9NBLGGH5R558",
+                        "sticky notes":     "9NBLGGH4QGHW",
+                        "onenote":          "XPFFZHVGQWWLHB",
+                        "skype":            "9WZDNCRFJ364",
+                    }
+
+                    aq_lower = app_query.lower()
+
+                    if any(w in t_lower for w in ("chrome", "google", "browser", "web")):
+                        direct_url = _chrome_urls.get(aq_lower)
+                        if direct_url:
+                            asyncio.create_task(_execute_browse(direct_url))
+                            response_text = f"Opening the official download page for {app_query}."
+                        else:
+                            import urllib.parse
+                            search_url = f"https://www.google.com/search?q=download+{urllib.parse.quote(app_query)}+for+windows+official+site"
+                            asyncio.create_task(_execute_browse(search_url))
+                            response_text = f"Searching Chrome for the {app_query} download page."
+
+                    elif any(w in t_lower for w in ("store", "microsoft", "windows store", "ms store")):
+                        store_id = _store_ids.get(aq_lower)
+                        if store_id:
+                            import subprocess as _sp
+                            _sp.Popen(f'start "" "ms-windows-store://pdp/?productid={store_id}"', shell=True)
+                            response_text = f"Opening the {app_query} page in the Microsoft Store."
+                        else:
+                            import urllib.parse, subprocess as _sp
+                            _sp.Popen(f'start "" "ms-windows-store://search/?query={urllib.parse.quote(app_query)}"', shell=True)
+                            response_text = f"Searching the Microsoft Store for {app_query}."
+
+                    else:
+                        # User said something else — fall through to LLM
+                        pending_app_search = None
+                        response_text = None
+
+                    if response_text:
+                        history.append({"role": "user", "content": user_text})
+                        history.append({"role": "assistant", "content": response_text})
+                        session_buffer.append({"role": "user", "content": user_text})
+                        session_buffer.append({"role": "assistant", "content": response_text})
+                        tts = strip_markdown_for_tts(response_text)
+                        await ws.send_json({"type": "status", "state": "speaking"})
+                        audio = await synthesize_speech(tts)
+                        if audio:
+                            await ws.send_json({"type": "audio", "data": base64.b64encode(audio).decode(), "text": response_text})
+                        else:
+                            await ws.send_json({"type": "text", "text": response_text})
+                            await ws.send_json({"type": "status", "state": "idle"})
+                        log.info(f"F.R.I.D.A.Y.: {response_text}")
+                        last_friday_response = response_text
+                        continue
 
                 # ── PLANNING MODE: answering clarifying questions ──
                 if planner.is_planning:
@@ -3075,7 +3195,10 @@ async def voice_handler(ws: WebSocket):
                             else:
                                 response_text = f"Pulling that up."
                         elif action["action"] == "open_app":
-                            response_text = await handle_open_app(action["target"])
+                            _app_result = await handle_open_app(action["target"])
+                            response_text = _app_result["confirmation"]
+                            if _app_result.get("not_found"):
+                                pending_app_search = _app_result["app_name"]
                         elif action["action"] == "write_notepad":
                             response_text = await handle_write_notepad(action["target"])
                         elif action["action"] == "show_recent":
@@ -3649,6 +3772,7 @@ async def api_settings_status():
             "user_name": env_dict.get("USER_NAME", ""),
             "openweathermap": bool(env_dict.get("OPENWEATHERMAP_API_KEY", "").strip()),
         },
+        "voice_gender": VOICE_GENDER,
     }
 
 @app.get("/api/settings/preferences")
@@ -3669,6 +3793,32 @@ async def api_save_preferences(body: PreferencesUpdate):
     USER_NAME = body.user_name
     HONORIFIC = body.honorific
     return {"success": True}
+
+# ---------------------------------------------------------------------------
+# Voice gender endpoint — hot-swap voice without restart
+# ---------------------------------------------------------------------------
+
+class VoiceGenderUpdate(BaseModel):
+    gender: str  # "female" or "male"
+
+@app.get("/api/settings/voice-gender")
+async def api_get_voice_gender():
+    return {"gender": VOICE_GENDER}
+
+@app.post("/api/settings/voice-gender")
+async def api_set_voice_gender(body: VoiceGenderUpdate):
+    global VOICE_GENDER, EDGE_TTS_VOICE, KOKORO_VOICE, _edge_tts_available
+    gender = body.gender.lower()
+    if gender not in ("female", "male"):
+        return JSONResponse({"success": False, "error": "gender must be 'female' or 'male'"}, status_code=400)
+    VOICE_GENDER   = gender
+    EDGE_TTS_VOICE = _EDGE_TTS_VOICES[gender]
+    KOKORO_VOICE   = _KOKORO_VOICES[gender]
+    _edge_tts_available = None  # re-probe on next TTS call
+    _write_env_key("VOICE_GENDER", gender)
+    log.info(f"[TTS] Voice gender changed to '{gender}' — Edge: {EDGE_TTS_VOICE}, Kokoro: {KOKORO_VOICE}")
+    return {"success": True, "gender": gender, "edge_voice": EDGE_TTS_VOICE, "kokoro_voice": KOKORO_VOICE}
+
 
 # ---------------------------------------------------------------------------
 # Control endpoints (restart, fix-self)

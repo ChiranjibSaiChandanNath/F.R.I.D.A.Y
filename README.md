@@ -218,7 +218,7 @@
 - **Task & Notes** — *"Remind me to call the client"*, *"Save that as a note"*
 - **Memory** — remembers your facts, project context, and preferences across sessions
 - **Screen Vision** — *"What's on my screen?"* triggers a screenshot and AI description
-- **Open Apps** — *"Open Notepad"*, *"Open Spotify"*, *"Launch VS Code"*
+- **Smart App Launcher** — *"Open Notepad"*, *"Open Spotify"*, *"Launch VS Code"*, *"Open VLC"* — uses 4-layer discovery. If the app isn't installed, F.R.I.D.A.Y. asks whether to open the **official download page in Chrome** or go directly to the **Microsoft Store app page**
 - **Write to Notepad** — *"Write a shopping list in Notepad"* creates and opens it instantly
 - **Refined personality** — Uses *"sir"* only for greetings and important moments, not after every sentence
 - **Audio-reactive Orb** — Three.js particle orb that pulses with your voice; dims to a dark inactive state when muted
@@ -358,6 +358,57 @@ FRIDAY can control your open browser window by voice — click buttons, open sea
 
 ---
 
+## 📦 Smart App Launcher
+
+F.R.I.D.A.Y. uses a **4-layer auto-discovery system** to open any installed app — no need to know the exact executable name.
+
+### Discovery Order
+
+| Layer | Method | Example |
+|---|---|---|
+| 1 | Hardcoded alias mapping | `"teams"` → `msteams:`, `"vs code"` → `code` |
+| 2 | Windows App Paths registry | Finds Steam, Photoshop, any registered app |
+| 3 | Start Menu shortcut scan | Games, custom installs with `.lnk` shortcuts |
+| 4 | Raw name as executable | CLI tools in PATH |
+
+### If the App Isn't Installed
+
+When all 4 layers fail, F.R.I.D.A.Y. asks where to find it:
+
+```
+You: "Open VLC"
+        ↓
+F.R.I.D.A.Y.: "I couldn't find VLC on your system.
+               Should I search for it on the Microsoft Store or Chrome?"
+        ↓
+  "Chrome"  →  Opens official download page: videolan.org/vlc/download-windows
+  "Store"   →  Opens Microsoft Store app page directly (no search needed)
+```
+
+For **unknown apps**, it falls back to a Google search or Store search automatically.
+
+### Supported Direct Links
+
+| App | Chrome → Official Site | Microsoft Store |
+|---|---|---|
+| VLC | videolan.org | ✅ Direct page |
+| Spotify | spotify.com/download | ✅ Direct page |
+| WhatsApp | whatsapp.com/download | ✅ Direct page |
+| Microsoft Teams | microsoft.com/teams | ✅ Direct page |
+| Telegram | desktop.telegram.org | ✅ Direct page |
+| Zoom | zoom.us/download | ✅ Direct page |
+| Discord | discord.com/download | ✅ Direct page |
+| VS Code | code.visualstudio.com | — |
+| Firefox | mozilla.org | — |
+| Slack | slack.com/downloads | — |
+| Notion | notion.so/desktop | — |
+| Steam, Epic, 7-Zip… | Official site | — |
+| **Any other app** | Google search | Store search |
+
+> **Keywords:** Say `"chrome"` / `"google"` / `"browser"` for the web path, or `"store"` / `"microsoft store"` for the Store path.
+
+---
+
 ## Step-by-Step Windows Setup Guide
 
 Follow this guide to get FRIDAY running from scratch on Windows.
@@ -426,20 +477,27 @@ start.bat
 >
 > **Every time after that:** FRIDAY starts directly, automatically prompting you for a biometric face scan or voice passphrase to unlock if enabled.
 
-This opens:
-- 🟢 A new window running `python server.py` (backend)
-- 🔵 The current window running `npm run dev` (frontend)
+`start.bat` does everything automatically:
+
+| Step | What happens |
+|---|---|
+| 1 | Opens **FRIDAY Backend** window → `py server.py` |
+| 2 | Opens **FRIDAY Frontend** window → `cd frontend && npm run dev` |
+| 3 | Waits 3 seconds for Vite to spin up |
+| 4 | Opens **Google Chrome** at `http://localhost:5173` automatically |
 
 ---
 
-### 🖥️ Option B — Two Separate Terminals
+### 🖥️ Option B — Manual (Two Terminals)
+
+If you prefer to run each part yourself:
 
 **Terminal 1 — Backend:**
 ```cmd
-python server.py
+py server.py
 ```
 *Expected output:*
-```text
+```
 [friday] Initializing Kokoro TTS model...
 [friday] Kokoro TTS initialized successfully.
 Uvicorn running on http://0.0.0.0:8340

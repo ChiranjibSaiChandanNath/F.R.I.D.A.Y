@@ -338,48 +338,191 @@ async def open_app(app_name: str) -> dict:
     import sys
     import subprocess
     success = False
-    
+
     app_clean = app_name.strip().lower()
-    
-    # Common Windows executable mappings
+
+    # Common Windows executable / URI mappings
     windows_mappings = {
+        # Development tools
         "vs code": "code",
         "vscode": "code",
         "visual studio code": "code",
+        "visual studio": "devenv",
         "notepad": "notepad",
+        "notepad++": "notepad++",
+        # System tools
         "calculator": "calc",
         "paint": "mspaint",
+        "task manager": "taskmgr",
+        "file explorer": "explorer",
+        "explorer": "explorer",
+        "control panel": "control",
+        "settings": "ms-settings:",
+        "command prompt": "cmd",
+        "powershell": "powershell",
+        # Office
         "word": "winword",
         "excel": "excel",
         "powerpoint": "powerpnt",
+        "outlook": "outlook",
+        "onenote": "onenote",
+        # Browsers
         "browser": "chrome",
         "google chrome": "chrome",
+        "chrome": "chrome",
         "firefox": "firefox",
         "edge": "msedge",
-        "spotify": "spotify",
+        "microsoft edge": "msedge",
+        # Communication / Collaboration
+        "teams": "msteams:",
+        "microsoft teams": "msteams:",
         "slack": "slack",
         "discord": "discord",
         "zoom": "zoom",
+        "whatsapp": "whatsapp:",
+        "telegram": "telegram",
+        "skype": "skype:",
+        # Media / Entertainment
+        "spotify": "spotify",
+        "vlc": "vlc",
+        "vlc media player": "vlc",
+        "media player": "wmplayer",
+        "photos": "ms-photos:",
+        # Productivity
+        "notion": "notion",
+        "obsidian": "obsidian",
+        "todo": "ms-todo:",
+        "sticky notes": "ms-stickynotes:",
+        "snipping tool": "snippingtool",
     }
-    
+
     if sys.platform == "win32":
-        cmd_target = windows_mappings.get(app_clean, app_clean)
+        import ctypes
+        import winreg
+        from pathlib import Path
+
+        SEE_MASK_NOCLOSEPROCESS = 0x00000040
+        SEE_MASK_FLAG_NO_UI    = 0x00000400  # suppress "cannot find" dialog
+
+        class SHELLEXECUTEINFO(ctypes.Structure):
+            _fields_ = [
+                ("cbSize",         ctypes.c_ulong),
+                ("fMask",          ctypes.c_ulong),
+                ("hwnd",           ctypes.c_void_p),
+                ("lpVerb",         ctypes.c_wchar_p),
+                ("lpFile",         ctypes.c_wchar_p),
+                ("lpParameters",   ctypes.c_wchar_p),
+                ("lpDirectory",    ctypes.c_wchar_p),
+                ("nShow",          ctypes.c_int),
+                ("hInstApp",       ctypes.c_void_p),
+                ("lpIDList",       ctypes.c_void_p),
+                ("lpClass",        ctypes.c_wchar_p),
+                ("hkeyClass",      ctypes.c_void_p),
+                ("dwHotKey",       ctypes.c_ulong),
+                ("hIconOrMonitor", ctypes.c_void_p),
+                ("hProcess",       ctypes.c_void_p),
+            ]
+
+        def _shell_open(target: str) -> bool:
+            """Open via ShellExecuteEx — no error popup. Returns True on success."""
+            sei = SHELLEXECUTEINFO()
+            sei.cbSize = ctypes.sizeof(sei)
+            sei.fMask  = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI
+            sei.lpVerb = "open"
+            sei.lpFile = target
+            sei.nShow  = 1  # SW_SHOWNORMAL
+            return bool(ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(sei)))
+
+        def _find_in_registry(query: str):
+            """Search App Paths registry — covers most apps that register an exe."""
+            key_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
+            for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+                try:
+                    with winreg.OpenKey(hive, key_path) as base:
+                        count = winreg.QueryInfoKey(base)[0]
+                        for i in range(count):
+                            subkey_name = winreg.EnumKey(base, i)
+                            exe_stem = subkey_name.lower().replace(".exe", "")
+                            if query in exe_stem or exe_stem in query:
+                                with winreg.OpenKey(base, subkey_name) as sk:
+                                    try:
+                                        path, _ = winreg.QueryValueEx(sk, "")
+                                        if path:
+                                            return path.strip('"')
+                                    except FileNotFoundError:
+                                        pass
+                except Exception:
+                    pass
+            return None
+
+        def _find_in_start_menu(query: str):
+            """Search Start Menu .lnk shortcuts by name similarity."""
+            search_dirs = [
+                Path(r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs"),
+                Path.home() / r"AppData\Roaming\Microsoft\Windows\Start Menu\Programs",
+            ]
+            best_match = None
+            best_score = 0
+            for base_dir in search_dirs:
+                if not base_dir.exists():
+                    continue
+                for lnk in base_dir.rglob("*.lnk"):
+                    stem = lnk.stem.lower()
+                    if stem == query:
+                        return str(lnk)
+                    elif query in stem or stem in query:
+                        score = len(set(query.split()) & set(stem.split()))
+                        if score > best_score:
+                            best_score = score
+                            best_match = str(lnk)
+            return best_match
+
+        # Layer 1: hardcoded mapping (fastest, handles aliases & URI schemes)
+        cmd_target = windows_mappings.get(app_clean)
+
+        # Layer 2: Windows App Paths registry
+        if not cmd_target:
+            cmd_target = _find_in_registry(app_clean)
+            if cmd_target:
+                log.info(f"[open_app] Found via registry: {cmd_target}")
+
+        # Layer 3: Start Menu shortcut scan
+        if not cmd_target:
+            cmd_target = _find_in_start_menu(app_clean)
+            if cmd_target:
+                log.info(f"[open_app] Found via Start Menu: {cmd_target}")
+
+        # Layer 4: Raw name directly (if it's in PATH)
+        if not cmd_target:
+            cmd_target = app_clean
+
         try:
-            subprocess.Popen(f'start "" "{cmd_target}"', shell=True)
-            success = True
+            if _shell_open(cmd_target):
+                success = True
+            else:
+                err = ctypes.GetLastError()
+                log.warning(f"[open_app] ShellExecuteEx failed for '{cmd_target}' (err={err})")
         except Exception as e:
-            log.error(f"Failed to open app {app_clean} (mapped: {cmd_target}) on Windows: {e}")
+            log.error(f"[open_app] Exception opening '{app_clean}': {e}")
+
     else:
         try:
             subprocess.Popen([app_clean])
             success = True
         except Exception as e:
-            log.error(f"Failed to open app {app_clean} on non-Windows: {e}")
+            log.error(f"[open_app] Failed to open '{app_clean}': {e}")
 
     return {
         "success": success,
-        "confirmation": f"Opening {app_name}." if success else f"I had trouble opening {app_name}."
+        "not_found": not success,
+        "app_name": app_name,
+        "confirmation": (
+            f"Opening {app_name}."
+            if success else
+            f"I couldn't find {app_name} on your system. Should I search for it on the Microsoft Store or Chrome?"
+        ),
     }
+
 
 
 async def write_notepad(text: str) -> dict:
